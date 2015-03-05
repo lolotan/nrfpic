@@ -47,10 +47,14 @@
 #define BATTERYLEVEL_POS    4
 #define SENDBUFFER_SIZE     5
 #define BATTLVL_SAMPLES     3
-#define TIMER_START_VALUE   1
+
 #define TIMER_BASE          (65536-15625)
+#define TIMER_8SEC_VALUE    1
+#define TIMER_START_VALUE   TIMER_8SEC_VALUE
 #define TIMER_10MIN_VALUE   75
 #define MAXPOLLCNT          300
+
+#define ACTIVITY_LED        LATAbits.LATA3
 
 unsigned char GlobalCounter;
 
@@ -59,6 +63,7 @@ void interrupt isr(void)
     if (INTCONbits.TMR0IF)
     {
         INTCONbits.TMR0IF = 0;
+        TMR0 = TIMER_BASE;     // Rearm timer for 8s
         GlobalCounter++;
     }    
 }
@@ -72,20 +77,18 @@ void putch(char data)
 }
 
 void WaitPowerSave(unsigned char TimeValue)
-{
-    TMR0 = TIMER_BASE;     // Value for 8s
+{    
     OSCTUNEbits.PLLEN = 0; // PLL OFF
     OSCCONbits.IRCF   = 1; // Oscillator configuration 125kHz
     T0CONbits.TMR0ON  = 1; // Timer0 ON
 
     while(GlobalCounter < TimeValue)
         SLEEP();
-
+    
     GlobalCounter     = 0;
     T0CONbits.TMR0ON  = 0; // Timer0 OFF
     OSCCONbits.IRCF   = 6; // 4MHz
     OSCTUNEbits.PLLEN = 1; // PLL ON
-    while(!OSCCONbits.IOFS);
 }
 
 void main(void)
@@ -98,7 +101,7 @@ void main(void)
     
     unsigned short Humidity;
     unsigned char  i;
-    unsigned short BattLvl;
+    unsigned short BatteryLvl;
 
     GlobalCounter = 0;
     
@@ -110,7 +113,7 @@ void main(void)
     
     for(;;)
     {
-        LATAbits.LATA3 = 1;             // Turn ON LED
+        ACTIVITY_LED = 1;             // Turn ON LED
 
         // Read DHT22 sensor values
         ret = DHT22_ReadSensor(&SendBuffer[HUMIDITYH_POS],
@@ -118,14 +121,13 @@ void main(void)
                                &SendBuffer[TEMPERATUREH_POS],
                                &SendBuffer[TEMPERATUREL_POS]);
         // Sample battery level
-        BattLvl = 0;
-        for (i=0 ; i<BATTLVL_SAMPLES ; i++)
+        for (i=0, BatteryLvl=0 ; i<BATTLVL_SAMPLES ; i++)
         {
             ADCON0bits.GODONE = 1;      // Begin ADC convertion
             while(ADCON0bits.GODONE);
-            BattLvl += ADRESH;
+            BatteryLvl += ADRESH;
         }        
-        SendBuffer[BATTERYLEVEL_POS] = (char)(BattLvl / BATTLVL_SAMPLES); // Battery level average
+        SendBuffer[BATTERYLEVEL_POS] = (char)(BatteryLvl / BATTLVL_SAMPLES); // Battery level average
         
 #ifdef DEBUG_MODE
         Temperature = (SendBuffer[TEMPERATUREH_POS] << 8) | SendBuffer[TEMPERATUREL_POS];
@@ -148,7 +150,7 @@ void main(void)
         printf("After Power ON STATUS : %02X\r\n", Status);
         
         NRF_WriteTXPayload(SendBuffer, SENDBUFFER_SIZE, &Status);
-        NRF_TXPayload();    // Send payload
+        NRF_TXPayload();                    // Send payload
 
         // Poll TX_DS & MAX_RT bit to know packet transmission status
         PollCounter = 0;
@@ -173,7 +175,7 @@ void main(void)
         NRF_SetPowerMode(POWER_OFF, &Status);   // Power off NRF module
         printf("After Power OFF Status : %02X\r\n", Status);
 
-        LATAbits.LATA3 = 0;                     // Turn OFF LED
+        ACTIVITY_LED = 0;                       // Turn OFF LED
 
         WaitPowerSave(TIMER_10MIN_VALUE);       // Powersave wait function
     }

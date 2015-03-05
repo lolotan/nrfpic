@@ -1,0 +1,10 @@
+TODO LIST :
+
+- Manage unsuccessful transmissions (channel or output power change)
+- Decrease system clock when idle for improving power saving (from 125kHz to 31kHz)
+- Add fields for sensor module identification / address
+- Add field for sensor module informations (bad/missed transmissions count, DHT22 sensor error)
+- Increase duration between transmissions when battery level is critical (power saving feature)
+- Allow receiving capabilities for configuration purposes (address, channel, transmission power, periodicity)
+
+
