@@ -49,7 +49,7 @@ void InitADC()
     TRISAbits.RA0   = 1;    // RA0 as input
     ADCON0bits.CHS  = 0;    // Channel 0 (AN0)
     ADCON1          = 0x0E; // AN0 analog, REF = VSS/VDD
-    ADCON2bits.ACQT = 0;    // 0 TAD
+    ADCON2bits.ACQT = 5;    // 12 TAD
     ADCON2bits.ADFM = 0;    // Left justified
     ADCON2bits.ADCS = 2;    // 010 = FOSC /32
     ADCON0bits.ADON = 1;    // Activate ADC

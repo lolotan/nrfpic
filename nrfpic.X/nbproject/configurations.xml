@@ -70,11 +70,11 @@
         <property key="identifier-length" value="31"/>
         <property key="operation-mode" value="lite"/>
         <property key="optimization-assembler" value="true"/>
-        <property key="optimization-assembler-files" value="false"/>
+        <property key="optimization-assembler-files" value="true"/>
         <property key="optimization-debug" value="false"/>
         <property key="optimization-global" value="true"/>
         <property key="optimization-level" value="9"/>
-        <property key="optimization-set" value="default"/>
+        <property key="optimization-set" value="all"/>
         <property key="optimization-speed" value="true"/>
         <property key="preprocess-assembler" value="true"/>
         <property key="undefine-macros" value=""/>

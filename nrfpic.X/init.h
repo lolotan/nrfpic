@@ -1,7 +1,7 @@
 #ifndef INIT_H
 #define	INIT_H
 
-#define DEBUG_MODE  // Uncomment this for verbose debug mode
+//#define DEBUG_MODE  // Uncomment this for verbose debug mode
 
 void InitOsc(void);
 void InitInterrupts(void);

@@ -40,19 +40,24 @@
 
 #define _XTAL_FREQ          16000000
 
-#define HUMIDITYH_POS       0
-#define HUMIDITYL_POS       1
-#define TEMPERATUREH_POS    2
-#define TEMPERATUREL_POS    3
-#define BATTERYLEVEL_POS    4
-#define SENDBUFFER_SIZE     5
-#define BATTLVL_SAMPLES     3
+#define SENSORIDH_POS       0
+#define SENSORIDL_POS       1
+#define HUMIDITYH_POS       2
+#define HUMIDITYL_POS       3
+#define TEMPERATUREH_POS    4
+#define TEMPERATUREL_POS    5
+#define BATTERYLEVEL_POS    6
+#define STATUS_POS          7
+#define SENDBUFFER_SIZE     8
+
+#define BATTLVL_SAMPLES     5
+#define FLAG_ERROR_DHT22    0x80
 
 #define TIMER_BASE          (65536-15625)
 #define TIMER_8SEC_VALUE    1
 #define TIMER_START_VALUE   TIMER_8SEC_VALUE
 #define TIMER_10MIN_VALUE   75
-#define MAXPOLLCNT          300
+#define MAXPOLLCNT          2000
 
 #define ACTIVITY_LED        LATAbits.LATA3
 
@@ -92,36 +97,46 @@ void WaitPowerSave(unsigned char TimeValue)
 }
 
 void main(void)
-{
+{    
     int   ret;    
     int   PollCounter;
-    char  Status;
-    char  SendBuffer[SENDBUFFER_SIZE];    
-    short Temperature;
+    int   ARCValue;
+    char  Status;    
+    char  SendBuffer[SENDBUFFER_SIZE];
     
-    unsigned short Humidity;
     unsigned char  i;
     unsigned short BatteryLvl;
 
-    GlobalCounter = 0;
-    
+    GlobalCounter = 0;    
+
     InitSystem();
     DHT22_Init();
-    NRF_Init();        
+    NRF_Init();
 
     WaitPowerSave(TIMER_START_VALUE);   
-    
+
+    NRF_SetModePTX(&Status);
+    // Set retransmit count and delay
+    NRF_SetAutoRetransmitCount(15, &Status);
+    NRF_SetAutoRetransmitDelay(15, &Status);
+
     for(;;)
     {
         ACTIVITY_LED = 1;             // Turn ON LED
+        
+        memset(SendBuffer, 0x00, SENDBUFFER_SIZE);
 
         // Read DHT22 sensor values
         ret = DHT22_ReadSensor(&SendBuffer[HUMIDITYH_POS],
                                &SendBuffer[HUMIDITYL_POS],
                                &SendBuffer[TEMPERATUREH_POS],
                                &SendBuffer[TEMPERATUREL_POS]);
+
+        if (ret == DHT22_ERROR)
+            SendBuffer[STATUS_POS] |= FLAG_ERROR_DHT22;
+        
         // Sample battery level
-        for (i=0, BatteryLvl=0 ; i<BATTLVL_SAMPLES ; i++)
+        for (i = 0, BatteryLvl = 0 ; i < BATTLVL_SAMPLES ; i++)
         {
             ADCON0bits.GODONE = 1;      // Begin ADC convertion
             while(ADCON0bits.GODONE);
@@ -130,31 +145,40 @@ void main(void)
         SendBuffer[BATTERYLEVEL_POS] = (char)(BatteryLvl / BATTLVL_SAMPLES); // Battery level average
         
 #ifdef DEBUG_MODE
-        Temperature = (SendBuffer[TEMPERATUREH_POS] << 8) | SendBuffer[TEMPERATUREL_POS];
-        Humidity    = (SendBuffer[HUMIDITYH_POS] << 8)    | SendBuffer[HUMIDITYL_POS];
-
-        printf("ReadSensor : %02X %02X %02X %02X %d\r\n", SendBuffer[HUMIDITYH_POS],
-                                                  SendBuffer[HUMIDITYL_POS],
-                                                  SendBuffer[TEMPERATUREH_POS],
-                                                  SendBuffer[TEMPERATUREL_POS], ret);
-
-        printf("Temperature   : %3.1f 'C\r\n", (float)Temperature/10.0);
-        printf("Humidity      : %3.1f %%\r\n", (float)Humidity/10.0);
+        printf("ReadSensor : %02X %02X %02X %02X %d\r\n",
+                SendBuffer[HUMIDITYH_POS],
+                SendBuffer[HUMIDITYL_POS],
+                SendBuffer[TEMPERATUREH_POS],
+                SendBuffer[TEMPERATUREL_POS], ret);
         printf("Battery level : %d\r\n", SendBuffer[BATTERYLEVEL_POS]);        
 #endif
 
         // Power ON NRF module
-        NRF_SetPowerMode(POWER_ON, &Status);
-        NRF_SetModePTX(&Status);
+        NRF_SetPowerMode(POWER_ON, &Status);        
         NRF_FlushTX(&Status);
         printf("After Power ON STATUS : %02X\r\n", Status);
         
+        NRF_GetLostRetriesCount(&ARCValue, &Status);
+        SendBuffer[STATUS_POS] |= (char)(ARCValue & 0x0F);
+        
+        SendBuffer[SENSORIDH_POS] = '0';
+        SendBuffer[SENSORIDL_POS] = '1';
+#ifdef DEBUG_MODE
+        printf("SendBuffer : %02X %02X %02X %02X %02X %02X %02X %02X\r\n",
+                SendBuffer[SENSORIDH_POS],
+                SendBuffer[SENSORIDL_POS],
+                SendBuffer[HUMIDITYH_POS],
+                SendBuffer[HUMIDITYL_POS],
+                SendBuffer[TEMPERATUREH_POS],
+                SendBuffer[TEMPERATUREL_POS],
+                SendBuffer[BATTERYLEVEL_POS],
+                SendBuffer[STATUS_POS]);
+#endif
         NRF_WriteTXPayload(SendBuffer, SENDBUFFER_SIZE, &Status);
         NRF_TXPayload();                    // Send payload
-
-        // Poll TX_DS & MAX_RT bit to know packet transmission status
-        PollCounter = 0;
-        while(PollCounter++ < MAXPOLLCNT)
+                
+        // Poll TX_DS & MAX_RT bit to know packet transmission status        
+        for (PollCounter = 0 ; PollCounter < MAXPOLLCNT ; PollCounter++)
         {
             NRF_GetStatus(&Status);
 
@@ -169,7 +193,7 @@ void main(void)
                 NRF_ClearMAX_RT(&Status);
                 break;
             }
-        }
+        }        
 
         printf("After PL transmit Status : %02X\r\n", Status);
         NRF_SetPowerMode(POWER_OFF, &Status);   // Power off NRF module
